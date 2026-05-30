@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: bgd_postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: citibike
+      POSTGRES_DB: citibike
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./sql:/sql:ro
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+      - ./data/raw:/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citibike -d citibike"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  pg_data:
+    name: bgd_pg_data
