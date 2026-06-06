@@ -4,3 +4,7 @@ __pycache__/
 *.pyo
 .venv/
 data/raw/*.csv
+data/bronze/
+data/silver/
+data/gold/
+data/

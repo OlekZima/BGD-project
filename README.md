@@ -6,34 +6,104 @@ Dataset: [Citi Bike Stations](https://www.kaggle.com/datasets/rosenthal/citi-bik
 
 | Who | Task |
 |-----|------|
-| Arkadiusz | DB |
+| Arkadiusz | DB (PostgreSQL schemas, Bronze loader) |
 | Robert | Kafka research |
-| Olek | Bronze → Silver → Gold |
+| Olek | Bronze → Silver → Gold (Polars ETL) |
 
-## Run
+---
 
-**Prerequisites:** Docker Desktop, Python 3.10+
+## Quick Start
 
 ```bash
-# 1. Start PostgreSQL (first run initialises the schema in a few seconds)
-start.bat          # Windows
-./start.sh         # Linux / Mac
+# 1. Install dependencies
+uv sync
 
-# 2. Install loader dependency
-pip install -r scripts/requirements.txt
+# 2. Download the dataset
+uv run python dataset.py            # puts CSVs in data/raw/
 
-# 3. Drop the Kaggle CSVs into data/raw/, then load Bronze
-set POSTGRES_PASSWORD=<password>                               # Windows
-export POSTGRES_PASSWORD=<password>                            # Linux / Mac
-python scripts/load_bronze.py data/raw                         # all CSVs in the folder
-python scripts/load_bronze.py data/raw/citi_bike_data_00000.csv  # or a single file
+# 3a. Start PostgreSQL (if loading into DB)
+docker compose up -d
 
-# 4. Connect
+# 3b. Or run the Polars ETL pipeline directly
+uv run python main.py               # uses data/raw/ by default
+```
+
+---
+
+## ETL Pipeline (Polars)
+
+The Polars pipeline reads CSVs from `data/raw/`, processes them through
+Bronze → Silver → Gold, and writes Parquet files to `data/`.
+
+**Run:**
+```bash
+uv run python main.py
+```
+
+**Sample size:** edit `.env` → `ETL_DATA_SAMPLE_SIZE=3` (default).
+Set to `0` or `all` for the full dataset.
+
+See [`agent.md`](agent.md) for full ETL architecture.
+
+---
+
+## PostgreSQL (Docker)
+
+Start the database:
+```bash
+docker compose up -d                  # starts PostgreSQL on port 5432
+```
+
+Studio / CLI:
+```bash
 psql postgresql://citibike:<password>@localhost:5432/citibike
 ```
 
-The loader uses server-side `COPY`: `data/raw` is mounted into the container at
-`/data`, so the database reads the files directly. Loads are idempotent —
-re-running skips rows already present.
+The init script (`docker/init/01_setup.sh`) runs the medallion SQL
+schemas from `sql/` automatically on first start.
 
-Monitor first-time init: `docker logs -f bgd_postgres`
+---
+
+## Bronze Loader (DB)
+
+After downloading the dataset and starting PostgreSQL, load the CSVs
+into the bronze tables:
+
+```bash
+export POSTGRES_PASSWORD=ChangeMe123       # set your .env password
+uv run python scripts/load_bronze.py data/raw/
+```
+
+The loader uses server-side `COPY` — `data/raw/` is mounted into the
+container at `/data`, so the DB reads the files directly.
+
+Loads are **idempotent**: re-running skips rows already present.
+
+---
+
+## Project Layout
+
+```
+BGD-project/
+├── .env                    # local config (gitignored)
+├── .env.example            # template for teammates
+├── docker-compose.yml      # PostgreSQL container
+├── docker/init/01_setup.sh # DDL init script
+├── sql/
+│   ├── 00_infrastructure/  # watermark, pipeline_log, dlq
+│   ├── 01_bronze/          # raw station tables
+│   ├── 02_silver/          # cleaned views
+│   └── 03_gold/            # analytics aggregates
+├── scripts/
+│   └── load_bronze.py      # COPY-based DB loader
+├── dataset.py              # Kaggle download → data/raw/
+├── main.py                 # ETL pipeline entry point
+├── etl/                    # Polars medallion pipeline
+│   ├── bronze.py, silver.py, gold.py, ...
+├── pyproject.toml          # dep: kagglehub, polars, python-dotenv, psycopg
+└── data/
+    ├── raw/                # CSV files (symlinked from Kaggle cache)
+    ├── bronze/             # Parquet (Polars pipeline)
+    ├── silver/
+    └── gold/
+```
