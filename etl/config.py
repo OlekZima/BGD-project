@@ -62,5 +62,5 @@ BRONZE_SCHEMA_OVERRIDES = {
 DEFAULT_BIN_HOURS = 6  # 4 bins per day for daily patterns
 
 # Ensure data directories exist
-for d in [BRONZE_DIR, SILVER_DIR, GOLD_DIR]:
+for d in [BRONZE_DIR, SILVER_DIR, GOLD_DIR, DATA_DIR / "raw"]:
     d.mkdir(parents=True, exist_ok=True)
