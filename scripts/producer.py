@@ -1,32 +1,47 @@
 #!/usr/bin/env python3
 
 import csv
-import time
 from pathlib import Path
 import orjson
 from kafka import KafkaProducer
 
-TOPIC = "citibike-raw"
+TOPIC_STATUS = "citibike-status"
+TOPIC_INFO = "citibike-info"
 RAW_DIR = Path("data/raw")
 
-LOG_EVERY = 200_000
+BATCH_SIZE = 2000
 
 producer = KafkaProducer(
     bootstrap_servers="localhost:29092",
     value_serializer=orjson.dumps,
-    key_serializer=lambda k: k.encode() if k else None,
-    acks=1,
-    linger_ms=100,
-    batch_size=5 * 1024 * 1024,
-    buffer_memory=512 * 1024 * 1024,
+    api_version=(3, 9, 0),
+    compression_type="lz4",
+    linger_ms=200,
+    batch_size=10 * 1024 * 1024,
 )
 
 def normalize(row):
     return {k: (None if v in ("", r"\N") else v) for k, v in row.items()}
 
+def send_batch(batch):
+    status_batch = []
+    info_batch = []
+
+    for r in batch:
+        status_batch.append(r)
+        if r.get("missing_station_information") == "false":
+            info_batch.append(r)
+
+    if status_batch:
+        producer.send(TOPIC_STATUS, value=status_batch)
+
+    if info_batch:
+        producer.send(TOPIC_INFO, value=info_batch)
+
+    print(f"status_batch={len(status_batch)}, info_batch={len(info_batch)}")
+
 def main():
-    rows = 0
-    start = time.time()
+    buffer = []
 
     for file in sorted(RAW_DIR.glob("*.csv")):
         print(f"Processing {file.name}")
@@ -35,19 +50,15 @@ def main():
             reader = csv.DictReader(f)
 
             for row in reader:
-                row = normalize(row)
+                buffer.append(normalize(row))
 
-                producer.send(
-                    TOPIC,
-                    key=row.get("station_id"),
-                    value=row
-                )
+                if len(buffer) >= BATCH_SIZE:
+                    send_batch(buffer)
+                    producer.flush()
+                    buffer = []
 
-                rows += 1
-
-                if rows % LOG_EVERY == 0:
-                    rate = rows / (time.time() - start)
-                    print(f"{rows:,} rows | {rate:,.0f} rows/sec")
+    if buffer:
+        send_batch(buffer)
 
     producer.flush()
     print("DONE")
