@@ -38,6 +38,7 @@ def run_pipeline(
     force_silver: bool = False,
     force_gold: bool = False,
     csv_dir: Path | None = None,
+    use_kafka: bool = False
 ) -> dict[str, Path]:
     """Run the full ETL pipeline (Bronze → Silver → Gold).
 
@@ -56,8 +57,21 @@ def run_pipeline(
     logger.info("=" * 60)
     logger.info("STEP 1/3: Bronze Layer — Raw Ingestion")
     logger.info("=" * 60)
-    bronze_path = ingest_bronze(csv_dir=csv_dir, force=force_bronze)
-    bronze_file = bronze_path / "data.parquet"
+    if use_kafka:
+        logger.info("Using Kafka Bronze ingestion")
+
+        bronze_file = BRONZE_DIR / "kafka_data.parquet"
+
+        if not bronze_file.exists():
+            raise RuntimeError(
+                "Kafka Bronze not found.\n"
+                "Run consumer first:\n"
+                "uv run python -m etl.consumer_bronze"
+            )
+
+    else:
+        bronze_path = ingest_bronze(csv_dir=csv_dir, force=force_bronze)
+        bronze_file = bronze_path / "data.parquet"
 
     # Step 2: Silver
     logger.info("=" * 60)

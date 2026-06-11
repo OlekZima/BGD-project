@@ -30,6 +30,47 @@ uv run python main.py               # uses data/raw/ by default
 
 ---
 
+## Kafka (Streaming Ingestion)
+
+Kafka is used as an alternative ingestion layer for both PostgreSQL and the Polars ETL pipeline.
+
+**Start Kafka**
+```bash
+docker compose up -d kafka kafka-ui
+uv run python scripts/create_topics.py
+```
+
+**Kafka → PostgreSQL pipeline**
+
+If CSV files are available in data/raw/, stream them into the database:
+```bash
+# Producer (CSV → Kafka)
+uv run python scripts/producer.py
+
+# Consumers (Kafka → PostgreSQL)
+uv run python scripts/consumer_status.py
+uv run python scripts/consumer_info.py
+```
+This loads data into bronze tables in PostgreSQL using streaming ingestion.
+
+**Kafka → ETL (Polars pipeline)**
+
+Instead of loading CSVs directly, you can ingest data into Bronze Parquet via Kafka.
+```bash
+# Producer (CSV → Kafka)
+uv run python scripts/producer.py
+
+# Consumer (Kafka → Parquet Bronze)
+uv run python -m etl.consumer_bronze
+```
+After Kafka ingestion completes:
+```bash
+uv run python main.py --kafka
+```
+This runs the ETL pipeline using Kafka-originated Bronze data instead of CSVs.
+
+---
+
 ## ETL Pipeline (Polars)
 
 The Polars pipeline reads CSVs from `data/raw/`, processes them through

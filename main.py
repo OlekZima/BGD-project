@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--force-silver", action="store_true", help="Re-process Silver layer")
     parser.add_argument("--force-gold", action="store_true", help="Re-build Gold views")
     parser.add_argument("--force-all", action="store_true", help="Re-run all layers")
+    parser.add_argument("--kafka", action="store_true", help="Use Kafka bronze instead of CSV")
     args = parser.parse_args()
 
     force_all = args.force_all
@@ -28,6 +29,7 @@ def main():
         force_bronze=force_all or args.force_bronze,
         force_silver=force_all or args.force_silver,
         force_gold=force_all or args.force_gold,
+        use_kafka=args.kafka
     )
 
     print("\n📦 Pipeline outputs:")
