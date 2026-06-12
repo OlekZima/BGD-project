@@ -17,6 +17,9 @@ BRONZE_DIR = DATA_DIR / "bronze"
 SILVER_DIR = DATA_DIR / "silver"
 GOLD_DIR = DATA_DIR / "gold"
 
+# Kafka (used by etl.consumer_bronze)
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+
 # Dataset info
 KAGGLE_DATASET = "rosenthal/citi-bike-stations"
 NUM_EXPECTED_FILES = 50

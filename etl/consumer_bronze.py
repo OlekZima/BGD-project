@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import time
 
 import polars as pl
 from kafka import KafkaConsumer
 
-from etl.config import BRONZE_SCHEMA_OVERRIDES, NULL_VALUES, BRONZE_DIR
+from etl.config import (
+    BRONZE_DIR,
+    BRONZE_SCHEMA_OVERRIDES,
+    KAFKA_BOOTSTRAP_SERVERS,
+    NULL_VALUES,
+)
 
 # ---------------- CONFIG ----------------
 
@@ -21,7 +27,7 @@ print("Connecting to Kafka...")
 
 consumer = KafkaConsumer(
     TOPIC,
-    bootstrap_servers="localhost:29092",
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
     api_version=(3, 9, 0),
     auto_offset_reset="earliest",
     enable_auto_commit=True,
@@ -52,8 +58,6 @@ def normalize(row: dict) -> dict:
         for col in SCHEMA_COLUMNS
     }
 
-
-import os
 
 def flush():
     global buffer

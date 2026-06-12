@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+"""Creates the Kafka topics inside the broker container (idempotent)."""
+
 import subprocess
 
-KAFKA_CONTAINER = "bgd_kafka"
+from settings import KAFKA_CONTAINER, TOPIC_INFO, TOPIC_STATUS
 
 TOPICS = [
-    ("citibike-status", 8),
-    ("citibike-info", 8),
+    (TOPIC_STATUS, 8),
+    (TOPIC_INFO, 8),
 ]
 
-def create_topic(name, partitions):
+
+def create_topic(name: str, partitions: int) -> None:
     cmd = [
         "docker", "exec", "-i", KAFKA_CONTAINER,
         "/opt/kafka/bin/kafka-topics.sh",
@@ -16,15 +20,12 @@ def create_topic(name, partitions):
         "--topic", name,
         "--bootstrap-server", "localhost:9092",
         "--partitions", str(partitions),
-        "--replication-factor", "1"
+        "--replication-factor", "1",
     ]
-
     subprocess.run(cmd, check=True)
-    print(f"Created topic: {name} ({partitions} partitions)")
+    print(f"Topic ready: {name} ({partitions} partitions)")
 
 
 if __name__ == "__main__":
-    for name, partitions in TOPICS:
-        create_topic(name, partitions)
-
-    print("All topics ready")
+    for topic_name, topic_partitions in TOPICS:
+        create_topic(topic_name, topic_partitions)
