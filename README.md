@@ -1,14 +1,22 @@
 # BGD-project
 
-Custom solution vs. Apache Kafka (maybe additional vs. Redpanda later)
+**Topic: Real-time ingestion — with and without Apache Kafka — performance comparison.**
+
+We ingest the same dataset into the same PostgreSQL bronze tables through two
+paths and measure end-to-end throughput:
+
+1. **Direct (without Kafka):** CSV → server-side `COPY` → bronze tables.
+2. **Streaming (with Kafka):** CSV → producer → Kafka topics → consumers → `COPY` → bronze tables.
 
 Dataset: [Citi Bike Stations](https://www.kaggle.com/datasets/rosenthal/citi-bike-stations/data)
 
-| Who | Task |
-|-----|------|
-| Arkadiusz | DB (PostgreSQL schemas, Bronze loader) |
-| Robert | Kafka research |
-| Olek | Bronze → Silver → Gold (Polars ETL) |
+## Team Contributions
+
+| Who | Contribution |
+|-----|--------------|
+| Arkadiusz | PostgreSQL medallion schemas, Docker setup, direct `COPY` Bronze loader, benchmark harness |
+| Robert | Kafka research, producer and consumers (PostgreSQL + Parquet pipelines), topics setup |
+| Olek | Bronze → Silver → Gold Polars ETL pipeline, dataset tooling |
 
 ---
 
@@ -71,6 +79,51 @@ This runs the ETL pipeline using Kafka-originated Bronze data instead of CSVs.
 
 ---
 
+## Benchmark — With vs. Without Kafka
+
+`scripts/benchmark.py` measures end-to-end ingestion into the bronze tables
+for both paths and records the results. **It truncates the bronze tables
+before every measured run**, so each run starts from zero rows.
+
+```bash
+docker compose up -d                      # PostgreSQL + Kafka must be running
+uv run python scripts/create_topics.py
+
+# Fair quick comparison: both modes ingest the same row-capped sample
+uv run python scripts/benchmark.py direct --max-rows 1000000
+uv run python scripts/benchmark.py kafka  --max-rows 1000000
+
+# Or whole files
+uv run python scripts/benchmark.py direct --files 2
+uv run python scripts/benchmark.py kafka  --files 2
+
+# Render benchmarks/RESULTS.md from all recorded runs
+uv run python scripts/benchmark.py report
+```
+
+**Methodology**
+
+- Both modes land identical rows in the same tables with the same
+  deduplication (`ON CONFLICT DO NOTHING`), so timings are comparable.
+- `direct` times `load_bronze.py` (server-side `COPY` from the mounted CSV).
+- `kafka` spawns the two consumers, waits until their consumer groups are
+  stable and any backlog is drained, truncates bronze, then starts the
+  producer. The clock runs from the first produced row until the bronze row
+  counts stop changing — i.e. it includes serialization, the broker hop, and
+  consumer-side batching.
+- Results are appended to `benchmarks/results.jsonl`; consumer output goes to
+  `benchmarks/*.log`.
+
+**Known asymmetries** (kept intentionally, documented for honesty): the
+streaming consumers run with `synchronous_commit = OFF` and unlogged staging
+tables; the direct path uses default commit settings and reads files the
+database can access directly.
+
+If port `29092` is taken on your machine, set `KAFKA_EXTERNAL_PORT` and
+`KAFKA_BOOTSTRAP_SERVERS` in `.env` (see `.env.example`).
+
+---
+
 ## ETL Pipeline (Polars)
 
 The Polars pipeline reads CSVs from `data/raw/`, processes them through
@@ -108,10 +161,9 @@ schemas from `sql/` automatically on first start.
 ## Bronze Loader (DB)
 
 After downloading the dataset and starting PostgreSQL, load the CSVs
-into the bronze tables:
+into the bronze tables (the password is read from `.env`):
 
 ```bash
-export POSTGRES_PASSWORD=ChangeMe123       # set your .env password
 uv run python scripts/load_bronze.py data/raw/
 ```
 
@@ -136,7 +188,13 @@ BGD-project/
 │   ├── 02_silver/          # cleaned views
 │   └── 03_gold/            # analytics aggregates
 ├── scripts/
-│   └── load_bronze.py      # COPY-based DB loader
+│   ├── load_bronze.py      # COPY-based DB loader (direct path)
+│   ├── producer.py         # CSV → Kafka producer
+│   ├── consumer_status.py  # Kafka → bronze_station_status
+│   ├── consumer_info.py    # Kafka → bronze_station_information
+│   ├── benchmark.py        # direct vs. kafka ingestion benchmark
+│   └── settings.py         # shared env-driven connection settings
+├── benchmarks/             # results.jsonl + RESULTS.md (generated)
 ├── dataset.py              # Kaggle download → data/raw/
 ├── main.py                 # ETL pipeline entry point
 ├── etl/                    # Polars medallion pipeline
