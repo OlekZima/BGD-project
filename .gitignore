@@ -9,3 +9,4 @@ data/silver/
 data/gold/
 data/
 .idea
+benchmarks/*.log
