@@ -20,6 +20,9 @@ import sys
 from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 _HOST     = os.getenv("DB_HOST", "localhost")
 _PORT     = int(os.getenv("DB_PORT", "5432"))
